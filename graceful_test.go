@@ -68,7 +68,7 @@ func TestGraceful_Run(t *testing.T) {
 }
 
 func TestGraceful_EmptyShutdown(t *testing.T) {
-	graceful := NewContext(context.Background())
+	graceful := NewWithContext(context.Background())
 
 	graceful.RegisterProcess(func() error {
 		return nil

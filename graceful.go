@@ -35,15 +35,15 @@ type Graceful struct {
 }
 
 // New initiate graceful using context background.
-func New() *Graceful {
-	return NewContext(
+func New(signals ...os.Signal) *Graceful {
+	return NewWithContext(
 		context.Background(),
-		defaultSignals...)
+		signals...)
 }
 
-// NewContext initiate graceful with context param.
+// NewWithContext initiate graceful with context param.
 // create signal waiting from os signal that will be triggered when some signal is called.
-func NewContext(ctx context.Context, signals ...os.Signal) *Graceful {
+func NewWithContext(ctx context.Context, signals ...os.Signal) *Graceful {
 	if len(signals) == 0 {
 		signals = defaultSignals
 	}
