@@ -1,6 +1,7 @@
 # Go Graceful
 
 Graceful is a Go package that helps to handle graceful shutdowns for applications. It provides a simple API to register shutdown functions that will be called when the application receives an operating system signal.
+This package is using [zerolog](https://github.com/rs/zerolog) for logging and [errgroup](https://golang.org/x/sync) for manage concurrency.
 
 ## Installation
 
@@ -54,7 +55,8 @@ func main() {
 ```
 
 ## Usage
-To use Graceful, first create a new instance of `Graceful`:
+
+### New
 ```go
 g := graceful.New()
 ```
@@ -65,14 +67,22 @@ By default, `Graceful` will listen for the following OS signals:
 - `syscall.SIGTERM`
 - `syscall.SIGHUP`
 
-To specify custom signals, you can use `NewContext`:
+you can also pass custom signals on `New` param like
+```go
+g := graceful.New(syscall.SIGINT, syscall.SIGTERM)
+```
+
+### NewWithContext
+To specify custom context, you can use `NewWithContext`. 
+You can also pass custom signal to this function. 
+By default, it will be listened for the following OS signals same as `New` function.
 ```go
 var (
     ctx     = context.Background()
     signals = []os.Signal{syscall.SIGINT, syscall.SIGTERM}	
 )
 
-g := graceful.NewContext(ctx, signals...)
+g := graceful.NewWithContext(ctx, signals...)
 ```
 
 ### RegisterProcess
