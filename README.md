@@ -94,6 +94,16 @@ g.RegisterProcess(func() error {
     // do something in the background
 })
 ```
+### RegisterProcessWithContext
+`RegisterProcessWithContext` is used to register a function to run in the background during the application's runtime 
+but has context on param.
+```go
+g := graceful.New()
+
+g.RegisterProcessWithContext(func(ctx context.Context) error {
+    // do something in the background
+})
+```
 ### RegisterShutdownProcess
 `RegisterShutdownProcess` is used to register a function to be called when the application receives a shutdown signal.
 ```go

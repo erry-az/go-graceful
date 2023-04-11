@@ -101,6 +101,18 @@ func (g *Graceful) RegisterProcess(process func() error) {
 	g.group.Go(process)
 }
 
+// RegisterProcessWithContext register running process to background with context param.
+// context is from signal and
+func (g *Graceful) RegisterProcessWithContext(process func(ctx context.Context) error) {
+	if process == nil {
+		return
+	}
+
+	g.group.Go(func() error {
+		return process(g.groupCtx)
+	})
+}
+
 // RegisterShutdownProcess register shutdown process that will be called when got some os signal.
 func (g *Graceful) RegisterShutdownProcess(process func(context.Context) error) {
 	g.RegisterShutdownProcessWithTag(process, "")

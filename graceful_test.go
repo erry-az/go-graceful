@@ -18,6 +18,7 @@ func TestGraceful_Run(t *testing.T) {
 	graceful.SetMaxShutdownProcess(0)
 	graceful.SetMaxShutdownTime(0)
 	graceful.RegisterProcess(nil)
+	graceful.RegisterProcessWithContext(nil)
 	graceful.RegisterShutdownProcess(nil)
 
 	graceful.SetMaxShutdownTime(1 * time.Second)
@@ -34,7 +35,7 @@ func TestGraceful_Run(t *testing.T) {
 		return nil
 	})
 
-	graceful.RegisterProcess(func() error {
+	graceful.RegisterProcessWithContext(func(ctx context.Context) error {
 		mx.Lock()
 		defer mx.Unlock()
 		procs = append(procs, true)
