@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/erry-az/go-graceful"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -14,10 +16,9 @@ func main() {
 	httpServer := &http.Server{Addr: ":8070"}
 
 	watcher.RegisterProcess(func() error {
-		log.Println("starting http server on :8070")
+		log.Info().Msg("starting http server on :8070")
 
-		if err := httpServer.ListenAndServe();
-			err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("got error from http server: %s", err)
 
 			return err
@@ -27,12 +28,19 @@ func main() {
 	})
 
 	watcher.RegisterShutdownProcessWithTag(func(ctx context.Context) error {
-		log.Println("stopping http server on :8070")
-
+		log.Info().Msg("stopping http server on :8070")
 		return httpServer.Shutdown(ctx)
 	}, "http-server")
 
+	watcher.RegisterShutdownProcess(func(ctx context.Context) error {
+		time.Sleep(20 * time.Second)
+		return errors.New("err 2")
+	})
+
+	watcher.SetCancelOnError(true)
+	watcher.SetMaxShutdownTime(1 * time.Second)
+
 	if err := watcher.Wait(); err != nil {
-		log.Printf("failed while gracefully shutdown on: %s", err)
+		log.Error().Err(err).Msg("failed while gracefully shutdown")
 	}
 }
