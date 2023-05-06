@@ -2,36 +2,25 @@ package graceful
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	// defaultMaxShutdownTime default value for max shutdown time.
-	defaultMaxShutdownTime = 10 * time.Second
-	// defaultMaxShutdownProcess default value for max shutdown process.
-	defaultMaxShutdownProcess = 5
-)
-
-// defaultSignals default os signal that will be handled.
-var defaultSignals = []os.Signal{os.Interrupt, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP}
-
 // Graceful struct to hold the provided options and dependencies
 type Graceful struct {
 	groupCtx, signalCtx context.Context
 	signalCancel        context.CancelFunc
 	group               *errgroup.Group
-	shutdownProcess     []func(ctx context.Context) error
-	shutdownTags        []string
+	shutdowns           []shutdown
 	maxShutdownTime     time.Duration
 	maxShutdownProcess  int
 	cancelOnError       bool
+	mutex               sync.Mutex
 }
 
 // New initiate graceful using context background.
@@ -58,8 +47,7 @@ func NewWithContext(ctx context.Context, signals ...os.Signal) *Graceful {
 		signalCtx:          signalCtx,
 		signalCancel:       signalCancel,
 		group:              group,
-		shutdownProcess:    make([]func(ctx context.Context) error, 0),
-		shutdownTags:       make([]string, 0),
+		shutdowns:          make([]shutdown, 0),
 		maxShutdownTime:    defaultMaxShutdownTime,
 		maxShutdownProcess: defaultMaxShutdownProcess,
 	}
@@ -114,28 +102,23 @@ func (g *Graceful) RegisterProcessWithContext(process func(ctx context.Context) 
 }
 
 // RegisterShutdownProcess register shutdown process that will be called when got some os signal.
-func (g *Graceful) RegisterShutdownProcess(process func(context.Context) error) {
-	g.RegisterShutdownProcessWithTag(process, "")
+func (g *Graceful) RegisterShutdownProcess(process func(context.Context) error) string {
+	return g.RegisterShutdownProcessWithTag(process, "")
 }
 
 // RegisterShutdownProcessWithTag register shutdown process using tag.
-func (g *Graceful) RegisterShutdownProcessWithTag(process func(context.Context) error, tag string) {
+func (g *Graceful) RegisterShutdownProcessWithTag(process func(context.Context) error, tag string) string {
 	if process == nil {
-		return
+		return ""
 	}
 
-	g.shutdownTags = append(g.shutdownTags, tag)
-	g.shutdownProcess = append(g.shutdownProcess, process)
-}
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
 
-// createTag creating shutdown tag.
-func (g *Graceful) createTag(i int) string {
-	tag := g.shutdownTags[i]
-	if tag == "" {
-		tag = fmt.Sprintf("process %d", i)
-	}
+	shutdownProcess, id := newShutdown(tag, process)
+	g.shutdowns = append(g.shutdowns, shutdownProcess)
 
-	return tag
+	return id.String()
 }
 
 // shutdown handle all shutdown process with concurrency.
@@ -146,24 +129,30 @@ func (g *Graceful) shutdown() error {
 	shutdownGroup, shutdownGroupCtx := errgroup.WithContext(shutdownCtx)
 	shutdownGroup.SetLimit(g.maxShutdownProcess)
 
-	for i, process := range g.shutdownProcess {
-		var (
-			iCopy       = i
-			processCopy = process
-		)
+	for _, s := range g.shutdowns {
+		shutdownCopy := s
 
 		shutdownGroup.Go(func() error {
-			tag := g.createTag(iCopy)
+			errChan := make(chan error)
 
-			err := processCopy(shutdownGroupCtx)
-			if err != nil {
-				log.Error().Str("tag", tag).Err(err).Send()
-			} else {
-				log.Info().Str("tag", tag).Msg("shutdown success")
-			}
+			go func() {
+				err := shutdownCopy.process(shutdownGroupCtx)
+				errChan <- err
+			}()
 
-			if g.cancelOnError {
-				return err
+			select {
+			case <-shutdownGroupCtx.Done():
+				return shutdownGroupCtx.Err()
+			case err := <-errChan:
+				if err != nil {
+					log.Error().Str(shutdownTag, shutdownCopy.tag).Err(err).Send()
+				} else {
+					log.Info().Str(shutdownTag, shutdownCopy.tag).Msg(shutdownSuccessMessage)
+				}
+
+				if g.cancelOnError {
+					return err
+				}
 			}
 
 			return nil
@@ -180,7 +169,7 @@ func (g *Graceful) Wait() error {
 	g.group.Go(func() error {
 		<-g.groupCtx.Done()
 
-		if len(g.shutdownProcess) > 0 {
+		if len(g.shutdowns) > 0 {
 			return g.shutdown()
 		}
 

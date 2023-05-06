@@ -113,6 +113,6 @@ func sendSignal(sig os.Signal) {
 	}
 
 	time.Sleep(100 * time.Millisecond)
-	p.Signal(sig)
+	_ = p.Signal(sig)
 	time.Sleep(10 * time.Millisecond) // give signal some time to propagate
 }
