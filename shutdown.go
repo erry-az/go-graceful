@@ -2,7 +2,6 @@ package graceful
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -19,7 +18,7 @@ func newShutdown(tag string, process func(ctx context.Context) error) (shutdown,
 	id := uuid.New()
 
 	if tag == "" {
-		tag = fmt.Sprintf("process %s", id.String())
+		tag = id.String()
 	}
 
 	s := shutdown{
